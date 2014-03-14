@@ -19,17 +19,27 @@ module Markety
 
     public
 
+    # set the logger
+    def set_logger(logger)
+      @logger = logger
+    end
+
+    # multiple lead functionality
+    def get_multiple_leads_by_email(emails)
+      if !emails.kind_of?(Array)
+        emails = []
+      end
+
+      get_multiple_leads(MultiLeadsKey.new(LeadKeyType::EMAIL, emails))
+    end
+
+    # lead functionality
     def get_lead_by_idnum(idnum)
       get_lead(LeadKey.new(LeadKeyType::IDNUM, idnum))
     end
 
-
     def get_lead_by_email(email)
       get_lead(LeadKey.new(LeadKeyType::EMAIL, email))
-    end
-
-    def set_logger(logger)
-      @logger = logger
     end
 
     def sync_lead(email, first, last, company, mobile)
@@ -50,7 +60,7 @@ module Markety
         end
 
         response = send_request(:sync_lead, {
-          :return_lead => true,
+          :dedup_enabled => true,
           :lead_record => {
             :email => lead_record.email,
             :lead_attribute_list => {
@@ -59,6 +69,35 @@ module Markety
           }
         })
         return LeadRecord.from_hash(response[:success_sync_lead][:result][:lead_record])
+      rescue Exception => e
+        @logger.log(e) if @logger
+        return nil
+      end
+    end
+
+    def sync_multiple_lead_records(lead_records)
+      lead_record_list = []
+
+      begin
+        for lead_record in lead_records
+          attributes = []
+          lead_record.each_attribute_pair do |name, value|
+            attributes << {:attr_name => name, :attr_value => value, :attr_type => lead_record.get_attribute_type(name) }
+          end
+
+          lead_record_list << {
+            :email => lead_record.email,
+            :lead_attribute_list => {
+              :attribute => attributes
+            }
+          }
+        end
+
+        response = send_request(:sync_multiple_leads, {
+          :dedup_enabled => true,
+          :lead_record_list => {:lead_record => lead_record_list}
+        })
+        return response[:success_sync_multiple_leads][:result][:sync_status_list]
       rescue Exception => e
         @logger.log(e) if @logger
         return nil
@@ -92,6 +131,7 @@ module Markety
       end
     end
 
+    # list functionality
     def add_to_list(list_key, email)
       list_operation(list_key, ListOperationType::ADD_TO, email)
     end
@@ -102,6 +142,19 @@ module Markety
 
     def is_member_of_list?(list_key, email)
       list_operation(list_key, ListOperationType::IS_MEMBER_OF, email)
+    end
+
+    # MObject functionality
+    def list_m_objects()
+      begin
+        response = send_request(:list_m_objects, {
+          :params_list_mobjects => []
+        })
+        return response[:success_list_m_objects][:result]
+      rescue Exception => e
+        @logger.log(e) if @logger
+        return nil
+      end
     end
 
     private
@@ -128,6 +181,16 @@ module Markety
       begin
         response = send_request(:get_lead, {"leadKey" => lead_key.to_hash})
         return LeadRecord.from_hash(response[:success_get_lead][:result][:lead_record_list][:lead_record])
+      rescue Exception => e
+        @logger.log(e) if @logger
+        return nil
+      end
+    end
+
+    def get_multiple_leads(lead_key)
+      begin
+        response = send_request(:get_multiple_leads, {"leadKey" => lead_key.to_hash})
+        return LeadRecord.from_hash_list(response[:success_get_multiple_leads][:result][:lead_record_list][:lead_record])
       rescue Exception => e
         @logger.log(e) if @logger
         return nil
