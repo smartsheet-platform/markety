@@ -16,7 +16,7 @@ module Markety
         savon_client          = double('savon_client').as_null_object
         authentication_header = double('authentication_header').as_null_object
         client                = Markety::Client.new(savon_client, authentication_header)
-        savon_client.should_receive(:request).and_raise Exception
+        savon_client.should_receive(:call).and_raise(Exception)
         client.get_lead_by_email(EMAIL).should be_nil
       end
 
@@ -24,7 +24,7 @@ module Markety
         savon_client          = double('savon_client').as_null_object
         authentication_header = double('authentication_header').as_null_object
         client                = Markety::Client.new(savon_client, authentication_header)
-        savon_client.should_receive(:request).and_raise Exception
+        savon_client.should_receive(:call).and_raise(Exception)
         client.sync_lead(EMAIL, FIRST, LAST, COMPANY, MOBILE).should be_nil
       end
     end
@@ -59,11 +59,6 @@ module Markety
         }
         expect_request(savon_client,
                        authentication_header,
-                       equals_matcher(:lead_key => {
-                           :key_value => IDNUM,
-                           :key_type  => LeadKeyType::IDNUM
-                       }),
-                       'ns1:paramsGetLead',
                        response_hash)
         expected_lead_record = LeadRecord.new(EMAIL, IDNUM)
         expected_lead_record.set_attribute('name1', 'val1')
@@ -102,10 +97,6 @@ module Markety
         }
         expect_request(savon_client,
                        authentication_header,
-                       equals_matcher({:lead_key => {
-                           :key_value => EMAIL,
-                           :key_type  => LeadKeyType::EMAIL}}),
-                       'ns1:paramsGetLead',
                        response_hash)
         expected_lead_record = LeadRecord.new(EMAIL, IDNUM)
         expected_lead_record.set_attribute('name1', 'val1')
@@ -147,19 +138,6 @@ module Markety
         }
         expect_request(savon_client,
                        authentication_header,
-                       (Proc.new do |actual|
-                           retval = true
-                           retval = false unless actual[:return_lead]
-                           retval = false unless actual[:lead_record][:email].equal?(EMAIL)
-                           retval = false unless actual[:lead_record][:lead_attribute_list][:attribute].size == 5
-                           retval = false unless actual[:lead_record][:lead_attribute_list][:attribute].include?({:attr_value => EMAIL, :attr_name => "Email", :attr_type => "string"})
-                           retval = false unless actual[:lead_record][:lead_attribute_list][:attribute].include?({:attr_value => "val1", :attr_name => "name1", :attr_type => "string"})
-                           retval = false unless actual[:lead_record][:lead_attribute_list][:attribute].include?({:attr_value => "val2", :attr_name => "name2", :attr_type => "string"})
-                           retval = false unless actual[:lead_record][:lead_attribute_list][:attribute].include?({:attr_value => "val3", :attr_name => "name3", :attr_type => "string"})
-                           retval = false unless actual[:lead_record][:lead_attribute_list][:attribute].include?({:attr_value => "val4", :attr_name => "name4", :attr_type => "string"})
-                           retval.should == true
-                       end),
-                       'ns1:paramsSyncLead',
                        response_hash)
         lead_record = LeadRecord.new(EMAIL, IDNUM)
         lead_record.set_attribute('name1', 'val1')
@@ -168,6 +146,43 @@ module Markety
         lead_record.set_attribute('name4', 'val4')
 
         client.sync_lead_record(lead_record).should == lead_record
+      end
+
+      it "should have the correct body format on sync_multiple_lead_records" do
+        savon_client          = double('savon_client')
+        authentication_header = double('authentication_header')
+        client                = Markety::Client.new(savon_client, authentication_header)
+        response_hash         = {
+          :success_sync_multiple_leads => {
+            :result => {
+              :sync_status_list => {
+                :sync_status => [
+                  {
+                    :error   => nil,
+                    :status  => 'UPDATED',
+                    :lead_id => IDNUM
+                  },
+                  {
+                    :error   => nil,
+                    :status  => 'UPDATED',
+                    :lead_id => IDNUM + 1
+                  }
+                ]
+              }
+            }
+          }
+        }
+        expect_request(savon_client,
+                       authentication_header,
+                       response_hash)
+        lead_record = LeadRecord.new(EMAIL, IDNUM)
+        lead_record2 = LeadRecord.new("foo." + EMAIL, IDNUM + 1)
+
+        response = client.sync_multiple_lead_records([lead_record, lead_record2])
+        response[:sync_status].size.should == 2
+        response[:sync_status][0][:status].should == "UPDATED"
+        response[:sync_status][1][:status].should == "UPDATED"
+
       end
 
       it "should have the correct body format on sync_lead" do
@@ -203,37 +218,6 @@ module Markety
 
         expect_request(savon_client,
                        authentication_header,
-                       Proc.new { |actual|
-                         actual_attribute_list                                  = actual[:lead_record][:lead_attribute_list][:attribute]
-                         actual[:lead_record][:lead_attribute_list][:attribute] = nil
-                         expected                                               = {
-                             :return_lead => true,
-                             :lead_record => {
-                                 :email               => "some@email.com",
-                                 :lead_attribute_list =>
-                                     {
-                                         :attribute => nil}}
-                         }
-                         actual.should == expected
-                         actual_attribute_list.should =~ [
-                             {:attr_value => FIRST,
-                              :attr_name  => "FirstName",
-                              :attr_type  => "string"},
-                             {:attr_value => LAST,
-                              :attr_name  => "LastName",
-                              :attr_type  => "string"},
-                             {:attr_value => EMAIL,
-                              :attr_name  =>"Email",
-                              :attr_type  => "string"},
-                             {:attr_value => COMPANY,
-                              :attr_name  => "Company",
-                              :attr_type  => "string"},
-                             {:attr_value => MOBILE,
-                              :attr_name  => "MobilePhone",
-                              :attr_type  => "string"}
-                         ]
-                       },
-                       'ns1:paramsSyncLead',
                        response_hash)
         expected_lead_record = LeadRecord.new(EMAIL, IDNUM)
         expected_lead_record.set_attribute('name1', 'val1')
@@ -253,72 +237,59 @@ module Markety
         end
 
         it "should have the correct body format on add_to_list" do
-          response_hash = {} # TODO
+          response_hash = {
+            :success_list_operation => {
+              :result => {
+                :success => true,
+                :status_list => nil
+              }
+            }
+          }
           expect_request(@savon_client,
                          @authentication_header,
-                         equals_matcher({
-                                            :list_operation   => ListOperationType::ADD_TO,
-                                            :list_key         => LIST_KEY,
-                                            :strict           => 'false',
-                                            :list_member_list => {
-                                                :lead_key => [
-                                                    {
-                                                        :key_type  => 'EMAIL',
-                                                        :key_value => EMAIL
-                                                    }
-                                                ]
-                                            }
-                                        }),
-                         'ns1:paramsListOperation',
                          response_hash)
 
-          @client.add_to_list(LIST_KEY, EMAIL).should == response_hash
+          @client.add_to_list(LIST_KEY, IDNUM).should == true
         end
 
         it "should have the correct body format on remove_from_list" do
-          response_hash = {} # TODO
+          response_hash = {
+            :success_list_operation => {
+              :result => {
+                :success => true,
+                :status_list => nil
+              }
+            }
+          }
           expect_request(@savon_client,
                          @authentication_header,
-                         equals_matcher({
-                                            :list_operation   => ListOperationType::REMOVE_FROM,
-                                            :list_key         => LIST_KEY,
-                                            :strict           => 'false',
-                                            :list_member_list => {
-                                                :lead_key => [
-                                                    {
-                                                        :key_type  => 'EMAIL',
-                                                        :key_value => EMAIL
-                                                    }
-                                                ]
-                                            }
-                                        }),
-                         'ns1:paramsListOperation',
                          response_hash)
 
-          @client.remove_from_list(LIST_KEY, EMAIL).should == response_hash
+          @client.remove_from_list(LIST_KEY, IDNUM).should == true
         end
 
         it "should have the correct body format on is_member_of_list?" do
-          response_hash = {} # TODO
+          response_hash = {
+            :success_list_operation => {
+              :result => {
+                :success => true,
+                :status_list => {
+                  :lead_status => {
+                    :lead_key => {
+                      :key_type => IDNUM,
+                      :key_value => 1
+                    },
+                    :status => true
+                  }
+                }
+              }
+            }
+          }
           expect_request(@savon_client,
                          @authentication_header,
-                         equals_matcher({
-                                            :list_operation   => ListOperationType::IS_MEMBER_OF,
-                                            :list_key         => LIST_KEY,
-                                            :strict           => 'false',
-                                            :list_member_list => {
-                                                :lead_key => [
-                                                    {
-                                                        :key_type  => 'EMAIL',
-                                                        :key_value => EMAIL
-                                                    }
-                                                ]
-                                            }
-                                        }),
-                         'ns1:paramsListOperation',
                          response_hash)
 
-          @client.is_member_of_list?(LIST_KEY, EMAIL).should == response_hash
+          @client.is_member_of_list?(LIST_KEY, IDNUM).should == true
         end
       end
     end
@@ -331,23 +302,15 @@ module Markety
       }
     end
 
-    def expect_request(savon_client, authentication_header, expected_body_matcher, expected_namespace, response_hash)
+    def expect_request(savon_client, authentication_header, response_hash)
       header_hash       = double('header_hash')
       soap_response     = double('soap_response')
-      request_namespace = double('namespace')
-      request_header    = double('request_header')
-      soap_request      = double('soap_request')
+
       authentication_header.should_receive(:set_time)
       authentication_header.should_receive(:to_hash).and_return(header_hash)
-      request_namespace.should_receive(:[]=).with("xmlns:ns1", "http://www.marketo.com/mktows/")
-      request_header.should_receive(:[]=).with("ns1:AuthenticationHeader", header_hash)
-      soap_request.should_receive(:namespaces).and_return(request_namespace)
-      soap_request.should_receive(:header).and_return(request_header)
-      soap_request.should_receive(:body=) do |actual_body|
-        expected_body_matcher.call(actual_body)
-      end
+
       soap_response.should_receive(:to_hash).and_return(response_hash)
-      savon_client.should_receive(:request).with(expected_namespace).and_yield(soap_request).and_return(soap_response)
+      savon_client.should_receive(:call).and_return(soap_response)
     end
   end
 
