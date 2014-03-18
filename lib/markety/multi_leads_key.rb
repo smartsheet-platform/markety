@@ -2,7 +2,7 @@ module Markety
   # Encapsulates a key used to look up or describe multiple marketo leads.
   class MultiLeadsKey
     # - *key_type* the type of key to use see LeadKeyType
-    # - *key_value* normally a string value for the given type
+    # - *key_values* normally an array of string values for the given type
     def initialize(key_type, key_values)
       @key_type = key_type
       @key_values = key_values

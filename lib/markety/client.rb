@@ -25,6 +25,14 @@ module Markety
     end
 
     # multiple lead functionality
+    def get_multiple_leads_by_idnum(idnums)
+      if !idnums.kind_of?(Array)
+        idnums = []
+      end
+
+      get_multiple_leads(MultiLeadsKey.new(LeadKeyType::IDNUM, idnums))
+    end
+
     def get_multiple_leads_by_email(emails)
       if !emails.kind_of?(Array)
         emails = []
@@ -75,14 +83,28 @@ module Markety
       end
     end
 
-    def sync_multiple_lead_records(lead_records)
+    def sync_multiple_lead_records(lead_records, attributes_to_sync = nil)
       lead_record_list = []
 
       begin
         for lead_record in lead_records
           attributes = []
-          lead_record.each_attribute_pair do |name, value|
-            attributes << {:attr_name => name, :attr_value => value, :attr_type => lead_record.get_attribute_type(name) }
+
+          # sync them all
+          if attributes_to_sync == nil
+            lead_record.each_attribute_pair do |name, value|
+              attributes << {:attr_name => name, :attr_value => value, :attr_type => lead_record.get_attribute_type(name) }
+            end
+          # sync this subset
+          else
+            # we need email for deduping
+            if (!attributes_to_sync.include?('Email'))
+              attributes_to_sync << 'Email'
+            end
+
+            for attribute in attributes_to_sync
+              attributes << {:attr_name => attribute, :attr_value => lead_record.get_attribute(attribute), :attr_type => lead_record.get_attribute_type(attribute) }
+            end
           end
 
           lead_record_list << {
@@ -131,19 +153,6 @@ module Markety
       end
     end
 
-    # list functionality
-    def add_to_list(list_key, email)
-      list_operation(list_key, ListOperationType::ADD_TO, email)
-    end
-
-    def remove_from_list(list_key, email)
-      list_operation(list_key, ListOperationType::REMOVE_FROM, email)
-    end
-
-    def is_member_of_list?(list_key, email)
-      list_operation(list_key, ListOperationType::IS_MEMBER_OF, email)
-    end
-
     # MObject functionality
     def list_m_objects()
       begin
@@ -157,20 +166,40 @@ module Markety
       end
     end
 
+    # list functionality
+    def add_to_list(list_key, idnum)
+      list_operation(list_key, ListOperationType::ADD_TO, idnum)
+    end
+
+    def remove_from_list(list_key, idnum)
+      list_operation(list_key, ListOperationType::REMOVE_FROM, idnum)
+    end
+
+    def is_member_of_list?(list_key, idnum)
+      list_operation(list_key, ListOperationType::IS_MEMBER_OF, idnum)
+    end
+
     private
-      def list_operation(list_key, list_operation_type, email)
+      def list_operation(list_key, list_operation_type, idnum)
         begin
           response = send_request(:list_operation, {
             :list_operation   => list_operation_type,
-            :list_key         => list_key,
+            :list_key         => {
+              :key_type => 'MKTOLISTNAME',
+              :key_value => list_key
+            },
             :strict           => 'false',
             :list_member_list => {
               :lead_key => [
-              {:key_type => 'EMAIL', :key_value => email}
-            ]
-          }
-        })
-        return response
+                {:key_type => 'IDNUM', :key_value => idnum}
+              ]
+            }
+          })
+          if list_operation_type == ListOperationType::IS_MEMBER_OF
+            return response[:success_list_operation][:result][:status_list][:lead_status][:status]
+          else
+            return response[:success_list_operation][:result][:success]
+          end
       rescue Exception => e
         @logger.log(e) if @logger
         return nil
@@ -189,7 +218,16 @@ module Markety
 
     def get_multiple_leads(lead_key)
       begin
-        response = send_request(:get_multiple_leads, {"leadKey" => lead_key.to_hash})
+        message = {
+          "leadSelector" => {
+            "keyType" => lead_key.key_type,
+            "keyValues" => {
+              "stringItem" => lead_key.key_values
+            }
+          },
+          :attributes! => {"leadSelector" => { "xsi:type" => "ns1:LeadKeySelector" }}
+        }
+        response = send_request(:get_multiple_leads, message)
         return LeadRecord.from_hash_list(response[:success_get_multiple_leads][:result][:lead_record_list][:lead_record])
       rescue Exception => e
         @logger.log(e) if @logger
