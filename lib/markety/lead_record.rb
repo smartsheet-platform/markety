@@ -22,6 +22,11 @@ module Markety
     def self.from_hash_list(leads_list)
       results = []
 
+      # savon converts a result set of one into a single hash
+      if leads_list.class != Array
+        leads_list = [leads_list]
+      end
+
       for savon_hash in leads_list
         lead_record = LeadRecord.new(savon_hash[:email], savon_hash[:id].to_i)
         savon_hash[:lead_attribute_list][:attribute].each do |attribute|
