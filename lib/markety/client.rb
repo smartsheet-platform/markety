@@ -1,11 +1,12 @@
 module Markety
-  def self.new_client(access_key, secret_key, end_point, api_version = '2_2')
+  def self.new_client(access_key, secret_key, end_point, api_version = '2_2', log = false)
     client = Savon.client do
       endpoint end_point
       wsdl "http://app.marketo.com/soap/mktows/#{api_version}?WSDL"
       env_namespace "SOAP-ENV"
       namespaces({"xmlns:ns1" => "http://www.marketo.com/mktows/"})
       pretty_print_xml true
+      log log
     end
     
     Client.new(client, Markety::AuthenticationHeader.new(access_key, secret_key))
@@ -18,11 +19,6 @@ module Markety
     end
 
     public
-
-    # set the logger
-    def set_logger(logger)
-      @logger = logger
-    end
 
     # multiple lead functionality
     def get_multiple_leads_by_idnum(idnums)
@@ -61,109 +57,89 @@ module Markety
     end
 
     def sync_lead_record(lead_record)
-      begin
-        attributes = []
-        lead_record.each_attribute_pair do |name, value|
-          attributes << {:attr_name => name, :attr_value => value, :attr_type => lead_record.get_attribute_type(name) }
-        end
-
-        response = send_request(:sync_lead, {
-          :dedup_enabled => true,
-          :lead_record => {
-            :email => lead_record.email,
-            :lead_attribute_list => {
-              :attribute => attributes
-            }
-          }
-        })
-        return LeadRecord.from_hash(response[:success_sync_lead][:result][:lead_record])
-      rescue Exception => e
-        @logger.log(e) if @logger
-        return nil
+      attributes = []
+      lead_record.each_attribute_pair do |name, value|
+        attributes << {:attr_name => name, :attr_value => value, :attr_type => lead_record.get_attribute_type(name) }
       end
+
+      response = send_request(:sync_lead, {
+        :dedup_enabled => true,
+        :lead_record => {
+          :email => lead_record.email,
+          :lead_attribute_list => {
+            :attribute => attributes
+          }
+        }
+      })
+      return LeadRecord.from_hash(response[:success_sync_lead][:result][:lead_record])
     end
 
     def sync_multiple_lead_records(lead_records, attributes_to_sync = nil)
       lead_record_list = []
 
-      begin
-        for lead_record in lead_records
-          attributes = []
+      for lead_record in lead_records
+        attributes = []
 
-          # sync them all
-          if attributes_to_sync == nil
-            lead_record.each_attribute_pair do |name, value|
-              attributes << {:attr_name => name, :attr_value => value, :attr_type => lead_record.get_attribute_type(name) }
-            end
-          # sync this subset
-          else
-            # we need email for deduping
-            if (!attributes_to_sync.include?('Email'))
-              attributes_to_sync << 'Email'
-            end
-
-            for attribute in attributes_to_sync
-              attributes << {:attr_name => attribute, :attr_value => lead_record.get_attribute(attribute), :attr_type => lead_record.get_attribute_type(attribute) }
-            end
+        # sync them all
+        if attributes_to_sync == nil
+          lead_record.each_attribute_pair do |name, value|
+            attributes << {:attr_name => name, :attr_value => value, :attr_type => lead_record.get_attribute_type(name) }
+          end
+        # sync this subset
+        else
+          # we need email for deduping
+          if (!attributes_to_sync.include?('Email'))
+            attributes_to_sync << 'Email'
           end
 
-          lead_record_list << {
-            :email => lead_record.email,
-            :lead_attribute_list => {
-              :attribute => attributes
-            }
-          }
+          for attribute in attributes_to_sync
+            attributes << {:attr_name => attribute, :attr_value => lead_record.get_attribute(attribute), :attr_type => lead_record.get_attribute_type(attribute) }
+          end
         end
 
-        response = send_request(:sync_multiple_leads, {
-          :dedup_enabled => true,
-          :lead_record_list => {:lead_record => lead_record_list}
-        })
-        return response[:success_sync_multiple_leads][:result][:sync_status_list]
-      rescue Exception => e
-        @logger.log(e) if @logger
-        return nil
+        lead_record_list << {
+          :email => lead_record.email,
+          :lead_attribute_list => {
+            :attribute => attributes
+          }
+        }
       end
+
+      response = send_request(:sync_multiple_leads, {
+        :dedup_enabled => true,
+        :lead_record_list => {:lead_record => lead_record_list}
+      })
+      return response[:success_sync_multiple_leads][:result][:sync_status_list]
     end
 
     def sync_lead_record_on_id(lead_record)
       idnum = lead_record.idnum
       raise 'lead record id not set' if idnum.nil?
 
-      begin
-        attributes = []
-        lead_record.each_attribute_pair do |name, value|
-          attributes << {:attr_name => name, :attr_value => value}
-        end
-
-        attributes << {:attr_name => 'Id', :attr_type => 'string', :attr_value => idnum.to_s}
-
-        response = send_request(:sync_lead, {
-          :return_lead => true,
-          :lead_record =>
-          {
-            :lead_attribute_list => { :attribute => attributes},
-            :id => idnum
-          }
-        })
-        return LeadRecord.from_hash(response[:success_sync_lead][:result][:lead_record])
-      rescue Exception => e
-        @logger.log(e) if @logger
-        return nil
+      attributes = []
+      lead_record.each_attribute_pair do |name, value|
+        attributes << {:attr_name => name, :attr_value => value}
       end
+
+      attributes << {:attr_name => 'Id', :attr_type => 'string', :attr_value => idnum.to_s}
+
+      response = send_request(:sync_lead, {
+        :return_lead => true,
+        :lead_record =>
+        {
+          :lead_attribute_list => { :attribute => attributes},
+          :id => idnum
+        }
+      })
+      return LeadRecord.from_hash(response[:success_sync_lead][:result][:lead_record])
     end
 
     # MObject functionality
     def list_m_objects()
-      begin
-        response = send_request(:list_m_objects, {
-          :params_list_mobjects => []
-        })
-        return response[:success_list_m_objects][:result]
-      rescue Exception => e
-        @logger.log(e) if @logger
-        return nil
-      end
+      response = send_request(:list_m_objects, {
+        :params_list_mobjects => []
+      })
+      return response[:success_list_m_objects][:result]
     end
 
     # list functionality
@@ -180,59 +156,45 @@ module Markety
     end
 
     private
-      def list_operation(list_key, list_operation_type, idnum)
-        begin
-          response = send_request(:list_operation, {
-            :list_operation   => list_operation_type,
-            :list_key         => {
-              :key_type => 'MKTOLISTNAME',
-              :key_value => list_key
-            },
-            :strict           => 'false',
-            :list_member_list => {
-              :lead_key => [
-                {:key_type => 'IDNUM', :key_value => idnum}
-              ]
-            }
-          })
-          if list_operation_type == ListOperationType::IS_MEMBER_OF
-            return response[:success_list_operation][:result][:status_list][:lead_status][:status]
-          else
-            return response[:success_list_operation][:result][:success]
-          end
-      rescue Exception => e
-        @logger.log(e) if @logger
-        return nil
+
+    def list_operation(list_key, list_operation_type, idnum)
+      response = send_request(:list_operation, {
+        :list_operation   => list_operation_type,
+        :list_key         => {
+          :key_type => 'MKTOLISTNAME',
+          :key_value => list_key
+        },
+        :strict           => 'false',
+        :list_member_list => {
+          :lead_key => [
+            {:key_type => 'IDNUM', :key_value => idnum}
+          ]
+        }
+      })
+      if list_operation_type == ListOperationType::IS_MEMBER_OF
+        return response[:success_list_operation][:result][:status_list][:lead_status][:status]
+      else
+        return response[:success_list_operation][:result][:success]
       end
     end
 
     def get_lead(lead_key)
-      begin
-        response = send_request(:get_lead, {"leadKey" => lead_key.to_hash})
-        return LeadRecord.from_hash(response[:success_get_lead][:result][:lead_record_list][:lead_record])
-      rescue Exception => e
-        @logger.log(e) if @logger
-        return nil
-      end
+      response = send_request(:get_lead, {"leadKey" => lead_key.to_hash})
+      return LeadRecord.from_hash(response[:success_get_lead][:result][:lead_record_list][:lead_record])
     end
 
     def get_multiple_leads(lead_key)
-      begin
-        message = {
-          "leadSelector" => {
-            "keyType" => lead_key.key_type,
-            "keyValues" => {
-              "stringItem" => lead_key.key_values
-            }
-          },
-          :attributes! => {"leadSelector" => { "xsi:type" => "ns1:LeadKeySelector" }}
-        }
-        response = send_request(:get_multiple_leads, message)
-        return LeadRecord.from_hash_list(response[:success_get_multiple_leads][:result][:lead_record_list][:lead_record])
-      rescue Exception => e
-        @logger.log(e) if @logger
-        return nil
-      end
+      message = {
+        "leadSelector" => {
+          "keyType" => lead_key.key_type,
+          "keyValues" => {
+            "stringItem" => lead_key.key_values
+          }
+        },
+        :attributes! => {"leadSelector" => { "xsi:type" => "ns1:LeadKeySelector" }}
+      }
+      response = send_request(:get_multiple_leads, message)
+      return LeadRecord.from_hash_list(response[:success_get_multiple_leads][:result][:lead_record_list][:lead_record])
     end
 
     def send_request(namespace, message)
