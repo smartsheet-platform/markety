@@ -23,7 +23,7 @@ module Markety
       results = []
 
       # savon converts a result set of one into a single hash
-      if leads_list.class != Array
+      unless leads_list.is_a? Array
         leads_list = [leads_list]
       end
 
