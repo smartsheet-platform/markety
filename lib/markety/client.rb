@@ -1,5 +1,6 @@
 module Markety
   def self.new_client(access_key, secret_key, end_point, api_version = '2_2', log = false)
+  def self.new_client(access_key, secret_key, end_point, api_version = '2_3', log = false, open_timeout = false, read_timeout = false)
     client = Savon.client do
       endpoint end_point
       wsdl "http://app.marketo.com/soap/mktows/#{api_version}?WSDL"
@@ -7,6 +8,8 @@ module Markety
       namespaces({"xmlns:ns1" => "http://www.marketo.com/mktows/"})
       pretty_print_xml true
       log log
+      open_timeout open_timeout
+      read_timeout read_timeout
     end
     
     Client.new(client, Markety::AuthenticationHeader.new(access_key, secret_key))
