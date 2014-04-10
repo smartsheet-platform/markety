@@ -102,6 +102,8 @@ module Markety
 
         lead_record_list << {
           :email => lead_record.keyEmail,
+          "ForeignSysPersonId" => lead_record.keyForeignSysPersonId,
+          "ForeignSysType" => lead_record.keyForeignSysType,
           :lead_attribute_list => {
             :attribute => attributes
           }

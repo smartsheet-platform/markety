@@ -3,9 +3,11 @@ module Markety
   class LeadRecord
     attr_reader :types
 
-    def initialize(email, idnum = nil)
+    def initialize(email, idnum = nil, foreignSysPersonId = nil, foreignSysType = nil)
       @idnum      = idnum
       @keyEmail   = email
+      @keyForeignSysPersonId = foreignSysPersonId
+      @keyForeignSysType = foreignSysType
       @attributes = {}
       @types      = {}
       set_attribute('Email', email)
@@ -51,6 +53,16 @@ module Markety
 
     def keyEmail
       @keyEmail
+    end
+
+    # get the record foreignSysPersonId key
+    def keyForeignSysPersonId
+      @keyForeignSysPersonId
+    end
+
+    # get the record foreignSysType key
+    def keyForeignSysType
+      @keyForeignSysType
     end
 
     def attributes
