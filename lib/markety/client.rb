@@ -1,5 +1,4 @@
 module Markety
-  def self.new_client(access_key, secret_key, end_point, api_version = '2_2', log = false)
   def self.new_client(access_key, secret_key, end_point, api_version = '2_3', log = false, open_timeout = false, read_timeout = false)
     client = Savon.client do
       endpoint end_point
