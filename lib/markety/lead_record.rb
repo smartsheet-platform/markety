@@ -5,6 +5,7 @@ module Markety
 
     def initialize(email, idnum = nil)
       @idnum      = idnum
+      @keyEmail   = email
       @attributes = {}
       @types      = {}
       set_attribute('Email', email)
@@ -46,6 +47,10 @@ module Markety
     # get the record email
     def email
       get_attribute('Email')
+    end
+
+    def keyEmail
+      @keyEmail
     end
 
     def attributes

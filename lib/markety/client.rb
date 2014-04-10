@@ -101,7 +101,7 @@ module Markety
         end
 
         lead_record_list << {
-          :email => lead_record.email,
+          :email => lead_record.keyEmail,
           :lead_attribute_list => {
             :attribute => attributes
           }
