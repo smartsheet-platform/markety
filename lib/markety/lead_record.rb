@@ -32,7 +32,12 @@ module Markety
 
       for savon_hash in leads_list
         lead_record = LeadRecord.new(savon_hash[:email], savon_hash[:id].to_i)
-        savon_attribute = savon_hash[:lead_attribute_list][:attribute]
+        # check for leads with no attributes
+        if savon_hash[:lead_attribute_list]
+          savon_attribute = savon_hash[:lead_attribute_list][:attribute]
+        else
+          savon_attribute = []
+        end
         unless savon_attribute.is_a? Array
           savon_attribute = [savon_attribute]
         end
