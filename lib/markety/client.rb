@@ -198,6 +198,7 @@ module Markety
         :attributes! => {"leadSelector" => { "xsi:type" => "ns1:LeadKeySelector" }}
       }
       response = send_request(:get_multiple_leads, message)
+      return [] if response[:success_get_multiple_leads][:result][:lead_record_list].nil?
       return LeadRecord.from_hash_list(response[:success_get_multiple_leads][:result][:lead_record_list][:lead_record])
     end
 
