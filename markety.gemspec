@@ -2,7 +2,7 @@ $:.push File.expand_path("../lib", __FILE__)
 require 'markety/version'
 
 Gem::Specification.new do |s|
-  s.name         = "markety"
+  s.name         = "markety_beamer"
   s.version      = Markety::VERSION
   s.summary      = "Marketo SOAP API integration"
   s.description  = "A client to allow easy integration with Marketo's SOAP API"
